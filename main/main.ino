@@ -21,11 +21,11 @@ uint8_t wavy;      //function variable for position setting of some patterns
 
 uint8_t currentPaletteCase = 0;  //input value holders
 uint8_t currentPatternCase = 0;
-volatile uint8_t buttonState[4] = { 0, 0, 0, 0 };
+volatile uint8_t buttonState[2] = { 0, 0 };
 uint8_t currentBrightness = 50;
 
 unsigned long lastDebounceTime = 0;  //timing gimmicks
-unsigned int debounceDelay = 300;
+unsigned int debounceDelay = 200;
 unsigned long tick = 0;
 
 //----------------------------------------------------------------
@@ -99,8 +99,8 @@ void setup() {  //code to run once
   pinMode(PALETTE_BUTTON, INPUT_PULLUP);
   pinMode(PATTERN_BUTTON, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(PALETTE_BUTTON), pressPalette, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PATTERN_BUTTON), pressPattern, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PALETTE_BUTTON), pressPalette, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PATTERN_BUTTON), pressPattern, FALLING);
 
   Serial.begin(9600);
 
@@ -116,45 +116,26 @@ void loop() {  //code to run continuously
   currentBrightness = map(brightnessPot, 0, 1023, 0, 245) + 10;
   FastLED.setBrightness(currentBrightness);
 
-  uint8_t inputState = buttonState[0] + buttonState[1] + buttonState[2] + buttonState[3];
+  uint8_t inputState = buttonState[0] + buttonState[1];
 
-  if (inputState == 6) {  //simultaneous press + release
-    int lvl = analogRead(BATTERY_DIVIDER);
-    uint8_t battLvl = map(lvl, 100, 1023, 0, 255);
-    CRGBPalette16 battColor = battery;
-    fill_solid(leds, NUM_LEDS, ColorFromPalette(battColor, battLvl));
-    FastLED.show();
-    delay(500);
+  if (inputState == 2) {  //simultaneous press + release
+    // int lvl = analogRead(BATTERY_DIVIDER);
+    // uint8_t battLvl = map(lvl, 100, 1023, 0, 255);
+    // CRGBPalette16 battColor = battery;
+    // fill_solid(leds, NUM_LEDS, CRGB::Brown);
+    // FastLED.show();
+    // delay(500);
 
     resetButtonState();
-  } else if (inputState == 3) {
+    resetButtonState();
+  } else if (inputState == 1 && (millis() - lastDebounceTime) > debounceDelay) {
     if (buttonState[0] == 1) {  //press + release on palette
       currentPaletteCase = currentPaletteCase % 6 + 1;
     } else {  //press + release on pattern
       currentPatternCase = (currentPatternCase + 1) % 7;
     }
     resetButtonState();
-  } else if (inputState == 1 && (millis() - lastDebounceTime) > debounceDelay) {
-    if (buttonState[0] == 1) {  //press + hold on palette
-      if (currentPaletteCase == 1) {
-        currentPaletteCase = 7;
-      } else {
-        currentPaletteCase--;
-      }
-    } else {  //press + release on pattern
-      if (currentPatternCase == 0) {
-        currentPatternCase = 7;
-      } else {
-        currentPatternCase--;
-      }
-    }
-    resetButtonState();
-  } else if ((inputState == 2 || inputState == 4) && (millis() - lastDebounceTime) > debounceDelay) {  //simultaneous press + hold
-    //do nothing
-    resetButtonState();
   }
-
-
 
   switch (currentPaletteCase) {  //color palette picker
     case 1:
@@ -204,10 +185,11 @@ void loop() {  //code to run continuously
       break;
     case 5:
       sawtoothPattern(60, 0, 0);
-      sawtoothPattern(71, 0, 1);
-      sawtoothPattern(111, 0, 2);
-      sawtoothPattern(63, 333, 3);
-      sawtoothPattern(67, 666, 4);
+      sawtoothPattern(16, 0, 1);
+      sawtoothPattern(111, 300, 2);
+      sawtoothPattern(18, 80, 3);
+      sawtoothPattern(67, 100, 4);
+      sawtoothPattern(23, 200, 5);
 
       fadeToBlackBy(leds, NUM_LEDS, 18);
       break;
@@ -232,7 +214,7 @@ void blinkPattern() {  //pattern setting
 void sawtoothPattern(uint8_t bpm, int offset, uint8_t rand_index) {
   wavy = map(beat8(bpm, offset), 0, 255, 0, NUM_LEDS - 1);
 
-  colorPicker(rand_index, wavy, 0);
+  huePicker(rand_index, wavy, 0);
 
   leds[wavy] = ColorFromPalette(currentPalette, rando[rand_index]);
 }
@@ -240,8 +222,8 @@ void sawtoothPattern(uint8_t bpm, int offset, uint8_t rand_index) {
 void wavePattern(uint8_t bpm, uint8_t phase, uint8_t rand_index) {
   wavy = beatsin8(bpm, 0, NUM_LEDS - 1, 0, phase);
 
-  colorPicker(rand_index, wavy, 0);
-  colorPicker(rand_index, wavy, NUM_LEDS - 1);
+  huePicker(rand_index, wavy, 0);
+  huePicker(rand_index, wavy, NUM_LEDS - 1);
 
   leds[wavy] = ColorFromPalette(currentPalette, rando[rand_index]);
 }
@@ -258,7 +240,7 @@ void cacPattern() {
 
 
 //--------------------------------
-void colorPicker(uint8_t rand_index, uint8_t wav, uint8_t i) {  //pattern setting helpers
+void huePicker(uint8_t rand_index, uint8_t wav, uint8_t i) {  //helpers
   if (wav == i) {
     rando[rand_index] = slowRandom8(rando[rand_index]);
   }
@@ -281,9 +263,7 @@ uint8_t slowRandom8(uint8_t randy) {
 
 //input gimmicks
 void pressPalette() {
-  if (buttonState[0] == 1) {
-    buttonState[1] = 2;
-  } else if (digitalRead(PALETTE_BUTTON) == LOW) {
+  if (digitalRead(PALETTE_BUTTON) == LOW) {
     buttonState[0] = 1;
     if ((millis() - lastDebounceTime) > debounceDelay) {
       lastDebounceTime = millis();
@@ -292,10 +272,8 @@ void pressPalette() {
 }
 
 void pressPattern() {
-  if (buttonState[2] == 1) {
-    buttonState[3] = 2;
-  } else if (digitalRead(PATTERN_BUTTON) == LOW) {
-    buttonState[2] = 1;
+  if (digitalRead(PATTERN_BUTTON) == LOW) {
+    buttonState[1] = 1;
     if ((millis() - lastDebounceTime) > debounceDelay) {
       lastDebounceTime = millis();
     }
@@ -303,11 +281,12 @@ void pressPattern() {
 }
 
 void resetButtonState() {
-  for (uint8_t i = 0; i < 4; i++) {
-    buttonState[i] = 0;
-  }
+  buttonState[0] = 0;
+  buttonState[1] = 0;
   fill_solid(leds, NUM_LEDS, CRGB(currentBrightness, currentBrightness, currentBrightness));
   FastLED.show();
-  delay(100);
-  //lastDebounceTime = 0;
+  delay(150);
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  FastLED.show();
+  delay(150);
 }
