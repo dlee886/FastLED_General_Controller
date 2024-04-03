@@ -1,5 +1,4 @@
 #include <FastLED.h>
-#include <Button.h>
 
 #define NUM_LEDS 32
 #define LED_PIN A4
@@ -9,10 +8,18 @@ CRGB leds[NUM_LEDS];
 
 uint8_t index = 0;
 uint8_t currentPaletteCase = 0;
-uint8_t currentPatternCase = 1;
+uint8_t currentPatternCase = 0;
 
-Button nextPalette(3);
-Button nextPattern(2);
+uint8_t rand1 = random8();
+uint8_t rand2 = random8();
+uint8_t rand3 = random8();
+uint8_t wave1;
+uint8_t wave2;
+uint8_t wave3;
+
+unsigned long lastDebounceTime = 0;
+unsigned int debounceDelay = 250;
+unsigned long tick = 0;
 
 DEFINE_GRADIENT_PALETTE(rainbow){
   0, 255, 0, 0,
@@ -30,7 +37,9 @@ DEFINE_GRADIENT_PALETTE(rainbow){
 
 DEFINE_GRADIENT_PALETTE(red){
   0, 255, 0, 0,
-  127, 255, 128, 0,
+  27, 255, 0, 0,
+  127, 255, 63, 0,
+  211, 255, 0, 0,
   255, 255, 0, 0
 };
 
@@ -76,17 +85,22 @@ CRGBPalette16 currentPalette(
   CRGB::White,
   CRGB::Black);
 
-  void setup() {
+void setup() {
   // put your setup code here, to run once:
   delay(500);
 
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(LED_BRIGHTNESS);
 
-  nextPalette.begin();
-  nextPattern.begin();
+  pinMode(2, INPUT_PULLUP);
+  pinMode(3, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(3), nextPalette, FALLING);
+  attachInterrupt(digitalPinToInterrupt(2), nextPattern, FALLING);
 
   Serial.begin(9600);
+
+  currentPaletteCase = 0;
 }
 
 void loop() {
@@ -109,46 +123,115 @@ void loop() {
       break;
     case 6:
       currentPalette = purple;
-      currentPaletteCase = 0;
+      break;
   }
 
   switch (currentPatternCase) {
-    case 1:
+    case 0:
       blinkPattern();
       break;
+    case 1:
+      flowPattern();
+      break;
     case 2:
-      wavePattern();
+      sawtoothPattern();
       break;
     case 3:
-      currentPatternCase = 1;
+      wavePattern();
       break;
-  }
-
-  EVERY_N_MILLISECONDS(8) {
-    if (nextPalette.pressed()) {
-      currentPaletteCase++;
-    }
-    if (nextPattern.pressed()) {
-      currentPatternCase++;
-    }
+    case 4:
+      sparklePattern();
+      break;
   }
 
   EVERY_N_MILLISECONDS(20) {
-    index += 8;
+    index += 16;
   };
 
   FastLED.show();
 }
 
 void blinkPattern() {
-  fill_palette(leds, NUM_LEDS, 0, 16, currentPalette, 255, LINEARBLEND);
-  delay(500);
+  fill_palette(leds, NUM_LEDS, index, 16, currentPalette, 255, LINEARBLEND);
+  delay(400);
   FastLED.show();
   fill_solid(leds, NUM_LEDS, CRGB::Black);
-  delay(500);
-  
+  delay(400);
+}
+
+void flowPattern() {
+  if (currentPaletteCase == 0) {
+    currentPaletteCase = 1;
+  }
+  fill_palette(leds, NUM_LEDS, index, 16, currentPalette, 255, LINEARBLEND);
+}
+
+void sawtoothPattern() {
+  if (millis() - tick >= 2000) {
+    rand1 = random8();
+    tick = millis();
+  } else if (millis() - tick == 1333) {
+    rand2 = random8();
+  } else if (millis() - tick == 666) {
+    rand3 = random8();
+  }
+
+  wave1 = map(beat8(60, 0), 60, 255, 0, NUM_LEDS - 1);
+  wave2 = map(beat8(60, 333), 60, 255, 0, NUM_LEDS - 1);
+  wave3 = map(beat8(60, 666), 60, 255, 0, NUM_LEDS - 1);
+
+  leds[wave1] = ColorFromPalette(currentPalette, rand1);
+  leds[wave2] = ColorFromPalette(currentPalette, rand2);
+  leds[wave3] = ColorFromPalette(currentPalette, rand3);
+
+  fadeToBlackBy(leds, NUM_LEDS, 10);
 }
 
 void wavePattern() {
-  fill_palette(leds, NUM_LEDS, index, 16, currentPalette, 255, LINEARBLEND);
-}
+  if (millis() % 499 <= 2) {
+    tick = millis() % 500;
+  } else if (tick == 333) {
+    rand3 = random8();
+  } else if (tick == 171) {
+    rand2 = random8();
+  } else if (tick == 2) {
+    rand1 = random8();
+  }
+
+    wave1 = beatsin8(30, 0, NUM_LEDS - 1, 0, 0);
+    wave2 = beatsin8(30, 0, NUM_LEDS - 1, 0, 85);
+    wave3 = beatsin8(30, 0, NUM_LEDS - 1, 0, 170);
+
+    leds[wave1] = ColorFromPalette(currentPalette, rand1);
+    //leds[wave2] = ColorFromPalette(currentPalette, rand2);
+    //leds[wave3] = ColorFromPalette(currentPalette, rand3);
+
+    fadeToBlackBy(leds, NUM_LEDS, 6);
+  }
+
+  void sparklePattern() {
+    if (millis() - tick > 25) {
+      leds[random8(NUM_LEDS - 1)] = ColorFromPalette(currentPalette, random8());
+      tick = millis();
+    }
+    fadeToBlackBy(leds, NUM_LEDS, 1);
+  }
+
+  void cacPattern() {
+  }
+
+  void nextPalette() {
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+      lastDebounceTime = millis();
+
+      currentPaletteCase = currentPaletteCase % 6 + 1;
+    }
+  }
+
+  void nextPattern() {
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+      lastDebounceTime = millis();
+
+      currentPatternCase = (currentPatternCase + 1) % 5;
+    }
+  }
