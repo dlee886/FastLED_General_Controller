@@ -19,10 +19,10 @@ CRGB leds[NUM_LEDS];  //led strip array
 uint8_t rando[6];  //randomizer variables for color setting of some patterns
 uint8_t wavy;      //function variable for position setting of some patterns
 
-uint8_t currentPaletteCase = 0;  //input value holders
-uint8_t currentPatternCase = 0;
+uint8_t currentPaletteCase;  //input value holders
+uint8_t currentPatternCase;
 volatile uint8_t buttonState[2] = { 0, 0 };
-uint8_t currentBrightness[8] = {255};
+uint8_t currentBrightness = 30;
 uint8_t runningAvgIndex = 0;
 
 unsigned long lastDebounceTime = 0;  //timing gimmicks
@@ -79,17 +79,21 @@ DEFINE_GRADIENT_PALETTE(purple){
 
 DEFINE_GRADIENT_PALETTE(white){
   0, 255, 255, 255,
-  127, 255, 255, 255,
+  127, 63, 63, 63,
   255, 255, 255, 255
 };
 
 DEFINE_GRADIENT_PALETTE(battery){
   0, 255, 0, 0,
-  127, 255, 255, 0,
+  10, 255, 0, 0,
+  140, 255, 255, 0,
+  150, 255, 255, 0,
+  233, 0, 255, 0,
   255, 0, 255, 0
 };
 
 CRGBPalette16 currentPalette = white;
+
 //----------------------------------------------------------------
 void setup() {  //code to run once
   delay(500);
@@ -109,6 +113,7 @@ void setup() {  //code to run once
   Serial.begin(9600);
 
   currentPaletteCase = 0;
+  currentPatternCase = 0;
 }
 
 
@@ -118,8 +123,8 @@ void loop() {  //code to run continuously
 
   EVERY_N_MILLISECONDS(100) {
     int brightnessVar = analogRead(BRIGHTNESS_POTENTIOMETER);
-    currentBrightness[0] = 255 - map(brightnessVar, 0, 1023, 0, 245);
-    FastLED.setBrightness(currentBrightness[0]);
+    currentBrightness = 255 - map(brightnessVar, 0, 1023, 0, 250);
+    FastLED.setBrightness(currentBrightness);
   }
 
   uint8_t inputState = buttonState[0] + buttonState[1];
@@ -132,13 +137,15 @@ void loop() {  //code to run continuously
     // FastLED.show();
     // delay(500);
 
+    
+
     resetButtonState();
     resetButtonState();
   } else if (inputState == 1 && (millis() - lastDebounceTime) > debounceDelay) {
     if (buttonState[0] == 1) {  //press + release on palette
-      currentPaletteCase = currentPaletteCase % 6 + 1;
+      currentPaletteCase = currentPaletteCase % 7 + 1;
     } else {  //press + release on pattern
-      currentPatternCase = (currentPatternCase + 1) % 7;
+      currentPatternCase = currentPatternCase % 7 + 1;
     }
     resetButtonState();
   }
@@ -162,20 +169,26 @@ void loop() {  //code to run continuously
     case 6:
       currentPalette = purple;
       break;
+    case 7:
+      currentPalette = white;
+      break;
   }
 
   switch (currentPatternCase) {  //pattern picker
     case 0:
-      blinkPattern();
+      batteryLevel();
       break;
     case 1:
+      blinkPattern();
+      break;
+    case 2:
       sawtoothPattern(60, 0, 0);
       sawtoothPattern(60, 333, 1);
       sawtoothPattern(60, 666, 2);
 
       fadeToBlackBy(leds, NUM_LEDS, 8);
       break;
-    case 2:
+    case 3:
       wavePattern(30, 0, 0);
       wavePattern(30, 85, 1);
       wavePattern(30, 170, 2);
@@ -183,13 +196,13 @@ void loop() {  //code to run continuously
 
       fadeToBlackBy(leds, NUM_LEDS, 8);
       break;
-    case 3:
+    case 4:
       sawtoothPattern(100, 0, 0);
       break;
-    case 4:
+    case 5:
       wavePattern(50, 0, 0);
       break;
-    case 5:
+    case 6:
       sawtoothPattern(60, 0, 0);
       sawtoothPattern(16, 0, 1);
       sawtoothPattern(111, 300, 2);
@@ -199,7 +212,7 @@ void loop() {  //code to run continuously
 
       fadeToBlackBy(leds, NUM_LEDS, 18);
       break;
-    case 6:
+    case 7:
       sparklePattern();
       fadeToBlackBy(leds, NUM_LEDS, 1);
       break;
@@ -215,6 +228,31 @@ void blinkPattern() {  //pattern setting
   FastLED.show();
   fill_palette(leds, NUM_LEDS, millis() / 500 * 16, 16, currentPalette, 255, LINEARBLEND);
   delay(250);
+}
+
+void batteryLevel() {
+  int lvl = analogRead(BATTERY_DIVIDER);
+  uint8_t batteryLvl = map (lvl, 720, 1023, 0, NUM_LEDS);
+
+  CRGBPalette16 batteryPalette = battery;
+
+
+  // fill_solid(leds, NUM_LEDS, ColorFromPalette(batteryPalette, batteryLvl));
+  // delay(750); 
+  // FastLED.show();
+  // fill_palette(leds, NUM_LEDS, 0, 255 / NUM_LEDS, batteryPalette);
+  // delay(750); 
+  // FastLED.show();
+
+  wavy = map(beat8(30, 500), 0, 255, 0, NUM_LEDS);
+
+  if (wavy < batteryLvl - 1) {
+    leds[wavy] = ColorFromPalette(batteryPalette, wavy * 255 / NUM_LEDS);
+  }
+  leds[NUM_LEDS] = CRGB::Black;
+
+  wavy = map(beat8(30, 1700), 0, 255, 0, NUM_LEDS);
+  leds[wavy] = CRGB::Black;
 }
 
 void sawtoothPattern(uint8_t bpm, int offset, uint8_t rand_index) {
@@ -240,9 +278,6 @@ void sparklePattern() {
     leds[random8(NUM_LEDS - 1)] = ColorFromPalette(currentPalette, random8());
     tick = millis();
   }
-}
-
-void cacPattern() {
 }
 
 
