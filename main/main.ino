@@ -9,8 +9,8 @@ Designed by: Damian
 
 #define NUM_LEDS 32  //pins & led strip
 #define LED_PIN A4
-#define PALETTE_BUTTON 2
-#define PATTERN_BUTTON 3
+#define PALETTE_BUTTON 3
+#define PATTERN_BUTTON 2
 #define BRIGHTNESS_POTENTIOMETER A3
 #define BATTERY_DIVIDER A2
 
@@ -22,7 +22,8 @@ uint8_t wavy;      //function variable for position setting of some patterns
 uint8_t currentPaletteCase = 0;  //input value holders
 uint8_t currentPatternCase = 0;
 volatile uint8_t buttonState[2] = { 0, 0 };
-uint8_t currentBrightness = 50;
+uint8_t currentBrightness[8] = {255};
+uint8_t runningAvgIndex = 0;
 
 unsigned long lastDebounceTime = 0;  //timing gimmicks
 unsigned int debounceDelay = 200;
@@ -99,6 +100,9 @@ void setup() {  //code to run once
   pinMode(PALETTE_BUTTON, INPUT_PULLUP);
   pinMode(PATTERN_BUTTON, INPUT_PULLUP);
 
+  pinMode(6, OUTPUT);
+  digitalWrite(6, HIGH);
+
   attachInterrupt(digitalPinToInterrupt(PALETTE_BUTTON), pressPalette, FALLING);
   attachInterrupt(digitalPinToInterrupt(PATTERN_BUTTON), pressPattern, FALLING);
 
@@ -112,9 +116,11 @@ void setup() {  //code to run once
 
 void loop() {  //code to run continuously
 
-  int brightnessPot = analogRead(BRIGHTNESS_POTENTIOMETER);
-  currentBrightness = map(brightnessPot, 0, 1023, 0, 245) + 10;
-  FastLED.setBrightness(currentBrightness);
+  EVERY_N_MILLISECONDS(100) {
+    int brightnessVar = analogRead(BRIGHTNESS_POTENTIOMETER);
+    currentBrightness[0] = 255 - map(brightnessVar, 0, 1023, 0, 245);
+    FastLED.setBrightness(currentBrightness[0]);
+  }
 
   uint8_t inputState = buttonState[0] + buttonState[1];
 
@@ -178,7 +184,7 @@ void loop() {  //code to run continuously
       fadeToBlackBy(leds, NUM_LEDS, 8);
       break;
     case 3:
-      sawtoothPattern(120, 0, 0);
+      sawtoothPattern(100, 0, 0);
       break;
     case 4:
       wavePattern(50, 0, 0);
@@ -212,11 +218,12 @@ void blinkPattern() {  //pattern setting
 }
 
 void sawtoothPattern(uint8_t bpm, int offset, uint8_t rand_index) {
-  wavy = map(beat8(bpm, offset), 0, 255, 0, NUM_LEDS - 1);
+  wavy = map(beat8(bpm, offset), 0, 255, 0, NUM_LEDS);
 
   huePicker(rand_index, wavy, 0);
 
   leds[wavy] = ColorFromPalette(currentPalette, rando[rand_index]);
+  leds[NUM_LEDS] = CRGB::Black;
 }
 
 void wavePattern(uint8_t bpm, uint8_t phase, uint8_t rand_index) {
