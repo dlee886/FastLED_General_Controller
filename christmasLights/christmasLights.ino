@@ -7,8 +7,8 @@ Designed by: Damian
 //----------------------------------------------------------------
 #include <FastLED.h>  //libraries
 
-#define NUM_LEDS 100  //pins & led strip
-#define LED_PIN 13
+#define NUM_LEDS 255  //pins & led strip
+#define LED_PIN A2
 #define PALETTE_BUTTON 3
 #define PATTERN_BUTTON 2
 #define BRIGHTNESS_POTENTIOMETER A3 // REVERSED ON LIGHT UNIT
@@ -113,7 +113,7 @@ void setup() {  //code to run once
 
   currentPaletteCase[0] = 1;
   currentPaletteCase[1] = 0;
-  currentPatternCase = 4;
+  currentPatternCase = 7;
 
   setColorPalette();
   setOtherPalette();
